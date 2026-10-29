@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');const {createPdf,rowPlan,renderPoster}=require('../dist/pdf.js');
+for(const count of [2,3,4]){const rows=rowPlan(Array(count).fill('21日（月）'));assert.equal(rows.length,count===4?2:1);assert.equal(rows[0].length,count===4?2:count);}
+for(const count of [2,3,4]){const painted=[];let size;const ctx={fillRect(){},set font(value){size=Number(value.match(/([\d.]+)px/)[1]);},measureText(text){return {width:Array.from(text).reduce((n,c)=>n+(/[0-9]/.test(c)?0.65:1),0)*size};},fillText(text,x,y){painted.push({text,x,y,width:this.measureText(text).width});}};renderPoster(ctx,Array.from({length:3},(_,i)=>({heading:`${i+1}月`,dates:Array(count).fill('12月21日（月）')})));for(const item of painted){assert.ok(item.x-item.width/2>=179);assert.ok(item.x+item.width/2<=2301);assert.ok(item.y>0&&item.y<3508);}const dates=painted.filter(p=>p.text==='12月21日（月）');assert.equal(new Set(dates.slice(0,count).map(p=>p.y)).size,count===4?2:1);}
+const bytes=createPdf(new Uint8Array([255,216,255,217]),2480,3508);const text=Buffer.from(bytes).toString('latin1');assert.match(text,/\/Count 1/);assert.match(text,/\/MediaBox \[0 0 595.27559 841.88976\]/);const xref=Number(text.match(/startxref\n(\d+)/)[1]);assert.equal(text.slice(xref,xref+4),'xref');const lines=text.slice(xref).split('\n');for(let i=1;i<=5;i++){const offset=Number(lines[2+i].slice(0,10));assert.ok(text.slice(offset).startsWith(`${i} 0 obj`));}assert.ok(!text.includes('http'));assert.ok(!text.includes('/CreationDate'));console.log('PASS: A4 single-page PDF, byte offsets, no URL/date metadata, 2/3 days one line, 4 days two lines, long manual dates fit within margins');
+// Mixed 2/3/4-day months must share one date font size, including long edited labels.
+for(const long of [false,true]){
+const painted=[];let size;
+const ctx={fillRect(){},set font(v){size=Number(v.match(/([\d.]+)px/)[1]);},measureText(t){return {width:Array.from(t).reduce((n,c)=>n+(/[0-9]/.test(c)?0.65:1),0)*size};},fillText(text,x,y){painted.push({text,size,x,y,width:this.measureText(text).width});}};
+renderPoster(ctx,[2,3,4].map((n,i)=>({heading:`${i+1}月`,dates:Array(n).fill(long?'12月21日（月）':'21日（月）')})));
+const dates=painted.filter(p=>p.text.endsWith('日（月）'));assert.equal(new Set(dates.map(p=>p.size)).size,1);assert.deepEqual(painted.filter(p=>/^\d月$/.test(p.text)).map(p=>p.size),[230,230,230]);for(const p of dates){assert.ok(p.x-p.width/2>=179);assert.ok(p.x+p.width/2<=2301);}
+}
+console.log('PASS: mixed 2/3/4-day PDF dates have identical font sizes; month heading sizes unchanged');

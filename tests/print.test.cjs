@@ -1,0 +1,9 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');const source=fs.readFileSync('dist/print.js','utf8');
+function setup({embedded=false,missing=false,throws=false}={}){const handlers={},events={};const button={addEventListener:(name,fn)=>handlers[name]=fn};const status={textContent:''};let calls=0,timers=[];const win={self:{},top:{},addEventListener:(name,fn)=>events[name]=fn};if(!embedded)win.top=win.self;if(!missing)win.print=()=>{calls++;if(throws)throw Error('blocked');};const context={window:win,document:{getElementById:id=>id==='print'?button:id==='print-status'?status:null,body:{classList:{contains:()=>false}}},setTimeout:fn=>(timers.push(fn),timers.length),clearTimeout:()=>{}};vm.runInNewContext(source,context);return {button,status,click:()=>handlers.click(),calls:()=>calls,timers,events};}
+let env=setup();env.click();assert.equal(env.calls(),1,'print is called synchronously before handler returns');assert.equal(env.timers.length,1);env.timers[0]();assert.match(env.status.textContent,/制限/);
+env=setup({embedded:true});assert.match(env.status.textContent,/埋め込み/);env.click();assert.equal(env.calls(),1);
+env=setup({missing:true});assert.equal(env.button.disabled,true);assert.match(env.status.textContent,/利用できません/);
+env=setup({throws:true});env.click();assert.match(env.status.textContent,/実行できません/);
+env=setup();env.click();env.events.afterprint();assert.match(env.status.textContent,/閉じました/);
+const css=fs.readFileSync('dist/style.css','utf8');assert.match(css,/@page\{size:A4 portrait;margin:0\}/);assert.match(css,/height:296mm/);assert.match(css,/\.print-card,\.card\{display:none!important\}/);
+console.log('PASS: synchronous tap/click print, embedded guidance, missing/throwing print, silent no-op fallback, afterprint, A4 poster-only print rules');
